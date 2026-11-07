@@ -1,7 +1,5 @@
-package cn.etheros.etheroslib.bukkit.event;
+package cn.etheros.etheroslib.common.event;
 
-import cn.etheros.etherosframework.di.annotation.GlobalService;
-import cn.etheros.etherosframework.di.annotation.PreDestroy;
 import cn.etheros.etherosframework.event.BusEvent;
 import cn.etheros.etherosframework.event.EventBus;
 import cn.etheros.etherosframework.event.Priority;
@@ -23,8 +21,11 @@ import java.util.function.Consumer;
  * <p>监听器按 {@link Priority} 升序调用，同优先级按注册顺序
  * <p>事件置为已取消后停止调用后续监听器
  * <p>监听器在 {@link #post} 的调用线程同步执行，异常直接抛给调用方并中断本次投递
+ * <p>平台模块以子类 + {@code @GlobalService} 的方式接入 DI，生命周期结束时调用 {@link #shutdown()}
+ *
+ * @author 西博卡兹
+ * @since 1.0.0
  */
-@GlobalService
 public class EtherosEventBus implements EventBus {
 
     // 优先级升序；List.sort 稳定，同优先级保持注册顺序
@@ -73,8 +74,7 @@ public class EtherosEventBus implements EventBus {
     /**
      * 释放全部监听器
      */
-    @PreDestroy
-    private void clear() {
+    public void shutdown() {
         registrations.clear();
     }
 

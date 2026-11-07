@@ -1,4 +1,4 @@
-package cn.etheros.etheroslib.bukkit.event;
+package cn.etheros.etheroslib.common.event;
 
 import cn.etheros.etherosframework.event.BusEvent;
 import cn.etheros.etherosframework.event.EventBus;
