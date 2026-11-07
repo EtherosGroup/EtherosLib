@@ -23,6 +23,7 @@ subprojects {
     apply(plugin = "java")
 
     val javaRelease = javaReleaseByProject[project.name] ?: 8
+    val etherosFrameworkVersion = property("etherosFrameworkVersion").toString()
 
     extensions.configure<JavaPluginExtension> {
         sourceCompatibility = JavaVersion.toVersion(javaRelease)
@@ -35,6 +36,8 @@ subprojects {
     }
 
     dependencies {
+        add("implementation", "cn.etheros:EtherosFramework:$etherosFrameworkVersion")
+
         add("testImplementation", platform("org.junit:junit-bom:5.11.4"))
         add("testImplementation", "org.junit.jupiter:junit-jupiter")
         add("testRuntimeOnly", "org.junit.platform:junit-platform-launcher")
