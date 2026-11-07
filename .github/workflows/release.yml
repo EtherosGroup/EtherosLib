@@ -1,97 +1,113 @@
-name: Release
+# 发布工作流：推 v* 标签时构建并创建 GitHub Release
+#
+# 触发：push v* 标签；workflow_dispatch 为演练路径，只产出 artifact，不创建 Release
+# 版本约束：标签去掉 v 前缀后等于 gradle.properties 的 projectVersion
+# 发布流程：改 projectVersion -> 提交 -> 打同名标签 -> 推送
+# job 分层：package（构建与校验）-> release（创建或更新 Release，needs package）
+# 密钥：仅仓库自带 GITHUB_TOKEN
 
-# 触发方式：
-#  1. 推送形如 v1.0.0 的 tag（推荐）
-#  2. 手动触发，填写版本号（会在当前 commit 上自动创建 tag 并发布）
+name: release
+
 on:
-  push:
-    tags:
-      - 'v*'
-  workflow_dispatch:
-    inputs:
-      version:
-        description: '版本号（不含 v 前缀，例如 1.0.0）'
-        required: true
-        type: string
+    push:
+        tags: ['v*']
+    workflow_dispatch:
 
 permissions:
-  contents: write
+    contents: read # 默认只读，release job 单独提权
 
 concurrency:
-  group: release-${{ github.ref }}
-  cancel-in-progress: false
+    group: release-${{ github.ref }}
+    cancel-in-progress: false
 
 jobs:
-  release:
-    name: Build & Publish
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+    package:
+        # 固定镜像版本，构建环境不随 ubuntu-latest 迁移
+        runs-on: ubuntu-24.04
+        timeout-minutes: 20
+        steps:
+            - uses: actions/checkout@v7
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+            # 标签与工程版本一致性门禁
+            - name: 核对标签与 projectVersion
+              if: startsWith(github.ref, 'refs/tags/')
+              run: |
+                  set -euo pipefail
+                  version=$(sed -n 's/^projectVersion=\(.*\)$/\1/p' gradle.properties)
+                  tag=${GITHUB_REF_NAME#v}
+                  if [ "$tag" != "$version" ]; then
+                    echo "错误：标签版本不匹配：标签 ${GITHUB_REF_NAME}，projectVersion ${version}"
+                    echo "版本修改入口：gradle.properties 的 projectVersion"
+                    exit 1
+                  fi
+                  echo "版本一致：${version}"
 
-      - name: Resolve version
-        id: version
-        shell: bash
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION="${{ github.event.inputs.version }}"
-          else
-            VERSION="${GITHUB_REF_NAME#v}"
-          fi
-          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
-            echo "::error::非法的版本号: $VERSION"
-            exit 1
-          fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "版本号: $VERSION"
+            - name: 设置 JDK 21
+              uses: actions/setup-java@v6
+              with:
+                  distribution: temurin
+                  java-version: '21'
 
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
+            # 海外运行器使用 Gradle 官方发行版地址；distributionSha256Sum 不随 URL 变化
+            - name: 切换 Gradle 发行版地址
+              run: sed -i 's|mirrors.cloud.tencent.com/gradle/|services.gradle.org/distributions/|' gradle/wrapper/gradle-wrapper.properties
 
-      # GitHub 运行器在海外，用官方发行版地址更快；只改 URL，distributionSha256Sum 仍有效
-      - name: Use official Gradle distribution in CI
-        shell: bash
-        run: |
-          sed -i 's|mirrors.cloud.tencent.com/gradle/|services.gradle.org/distributions/|' \
-            gradle/wrapper/gradle-wrapper.properties
-          grep -E '^distributionUrl' gradle/wrapper/gradle-wrapper.properties
+            - name: 设置 Gradle
+              uses: gradle/actions/setup-gradle@v6
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+            - name: 构建与单测
+              run: ./gradlew build --no-daemon --console=plain
 
-      - name: Build
-        shell: bash
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: ./gradlew build -PprojectVersion="$VERSION" --console=plain --stacktrace
+            - name: 校验产物
+              run: bash .github/scripts/verify-artifacts.sh
 
-      - name: Collect artifacts
-        shell: bash
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          set -euo pipefail
-          mkdir -p dist
-          cp "bukkit/build/libs/EtherosLib-Bukkit-${VERSION}.jar" dist/
-          cp "velocity/build/libs/EtherosLib-Velocity-${VERSION}.jar" dist/
-          cp "common/build/libs/EtherosLib-Common-${VERSION}.jar" dist/
-          (cd dist && sha256sum ./*.jar > SHA256SUMS.txt)
-          ls -l dist
-          cat dist/SHA256SUMS.txt
+            - name: 上传产物
+              uses: actions/upload-artifact@v7
+              with:
+                  name: release-assets-${{ github.sha }}
+                  path: dist/*
+                  if-no-files-found: error
 
-      - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ steps.version.outputs.version }}
-          name: EtherosLib v${{ steps.version.outputs.version }}
-          generate_release_notes: true
-          fail_on_unmatched_files: true
-          prerelease: ${{ contains(steps.version.outputs.version, '-') }}
-          files: |
-            dist/*.jar
-            dist/SHA256SUMS.txt
+    release:
+        needs: package
+        if: github.event_name == 'push'
+        runs-on: ubuntu-24.04
+        timeout-minutes: 10
+        permissions:
+            contents: write # 创建 Release 与上传附件
+        steps:
+            # gh 的仓库上下文
+            - uses: actions/checkout@v7
+
+            - name: 下载产物
+              uses: actions/download-artifact@v7
+              with:
+                  name: release-assets-${{ github.sha }}
+                  path: assets
+
+            - name: 创建或更新 Release
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  TAG: ${{ github.ref_name }}
+              run: |
+                  set -euo pipefail
+                  version=${TAG#v}
+                  files=(assets/*.jar assets/SHA256SUMS.txt)
+                  for f in "${files[@]}"; do
+                    if [ ! -f "$f" ]; then
+                      echo "错误：附件缺失：$f"
+                      exit 1
+                    fi
+                  done
+                  ls -l "${files[@]}"
+                  repo="$GITHUB_REPOSITORY"
+                  if gh release view "$TAG" -R "$repo" > /dev/null 2>&1; then
+                    gh release upload "$TAG" "${files[@]}" -R "$repo" --clobber
+                  else
+                    args=(--title "EtherosLib ${TAG}" --generate-notes)
+                    case "$version" in
+                      *-*) args+=(--prerelease) ;;
+                    esac
+                    gh release create "$TAG" -R "$repo" "${args[@]}" "${files[@]}"
+                  fi
+                  gh release view "$TAG" -R "$repo" --json url --jq .url
