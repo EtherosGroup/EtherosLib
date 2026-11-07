@@ -1,0 +1,6 @@
+name: EtherosLib
+version: '${version}'
+main: cn.etheros.etheroslib.bukkit.EtherosLib
+load: STARTUP
+description: EtherosLib 跨平台核心库 - Bukkit/Paper 实现
+author: Etheros

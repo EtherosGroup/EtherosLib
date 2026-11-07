@@ -1,0 +1,26 @@
+# ---------- Gradle ----------
+.gradle/
+build/
+# wrapper 必须入库，供 ./gradlew 引导构建
+!gradle/wrapper/gradle-wrapper.jar
+
+# ---------- IntelliJ IDEA ----------
+# IDE 导入/构建时会频繁改动本地配置，不入库；
+# 如需共享运行配置，可改为只忽略 .idea/workspace.xml、.idea/shelf/ 等
+.idea/
+*.iml
+out/
+
+# ---------- Java ----------
+*.class
+*.log
+hs_err_pid*
+replay_pid*
+
+# ---------- 操作系统 ----------
+.DS_Store
+Thumbs.db
+
+# ---------- 本地临时目录 ----------
+tmp/
+.tmpinspect/
