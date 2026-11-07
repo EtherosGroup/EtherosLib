@@ -1,7 +1,7 @@
 package cn.etheros.etheroslib.bukkit;
 
+import cn.etheros.etherosframework.di.core.ApplicationContext;
 import cn.etheros.etheroslib.common.EtherosLibCore;
-import cn.etheros.etheroslib.common.Platform;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /**
@@ -9,17 +9,17 @@ import org.bukkit.plugin.java.JavaPlugin;
  */
 public final class EtherosLib extends JavaPlugin {
 
+    private ApplicationContext context;
+
     @Override
     public void onEnable() {
-        EtherosLibCore core = EtherosLibCore.get();
-        core.initialize(Platform.BUKKIT, getDescription().getVersion());
-        getLogger().info("EtherosLib " + core.getVersion()
-                + " 已加载（" + core.getPlatform().getDisplayName() + "）");
+        context = ApplicationContext.run(EtherosLib.class);
     }
 
     @Override
     public void onDisable() {
-        EtherosLibCore.get().clearServices();
-        getLogger().info("EtherosLib 已卸载");
+        if (context != null) {
+            context.shutdown();
+        }
     }
 }
