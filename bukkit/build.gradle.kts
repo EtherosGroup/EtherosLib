@@ -10,6 +10,8 @@ val paperApiVersion: String by project
 dependencies {
     // 平台 API 仅编译期使用，运行期由服务端提供
     compileOnly("com.destroystokyo.paper:paper-api:$paperApiVersion")
+    // 单测需要 Bukkit 类型
+    testImplementation("com.destroystokyo.paper:paper-api:$paperApiVersion")
     // 跨平台核心代码随插件一起打包
     implementation(project(":common"))
 }
