@@ -1,0 +1,59 @@
+name: Publish
+
+on:
+    push:
+        tags:
+            - 'v*'
+    workflow_dispatch:
+
+permissions:
+    contents: read
+
+concurrency:
+    group: publish-maven-central
+    cancel-in-progress: false
+
+jobs:
+    publish:
+        # 固定镜像版本，构建环境不随 ubuntu-latest 迁移
+        runs-on: ubuntu-24.04
+        timeout-minutes: 20
+        steps:
+            - uses: actions/checkout@v7
+              with:
+                  fetch-depth: 0
+
+            - name: 设置 JDK 21
+              uses: actions/setup-java@v6
+              with:
+                  distribution: temurin
+                  java-version: '21'
+
+            # 海外运行器使用 Gradle 官方发行版地址；distributionSha256Sum 不随 URL 变化
+            - name: 切换 Gradle 发行版地址
+              run: sed -i 's|mirrors.cloud.tencent.com/gradle/|services.gradle.org/distributions/|' gradle/wrapper/gradle-wrapper.properties
+
+            - name: 设置 Gradle
+              uses: gradle/actions/setup-gradle@v6
+
+            - name: 核对标签与 projectVersion
+              if: startsWith(github.ref, 'refs/tags/')
+              run: |
+                  set -euo pipefail
+                  version=$(sed -n 's/^projectVersion=\(.*\)$/\1/p' gradle.properties)
+                  tag=${GITHUB_REF_NAME#v}
+                  if [ "$tag" != "$version" ]; then
+                    echo "错误：标签版本不匹配：标签 ${GITHUB_REF_NAME}，projectVersion ${version}"
+                    exit 1
+                  fi
+
+            - name: 构建与单测
+              run: ./gradlew build --no-daemon --console=plain
+
+            - name: 发布到 Maven Central
+              env:
+                  ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+                  ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+                  ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.GPG_SIGNING_KEY }}
+                  ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.GPG_SIGNING_PASSWORD }}
+              run: ./gradlew publishAndReleaseToMavenCentral --no-daemon --console=plain

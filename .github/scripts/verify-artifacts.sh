@@ -12,9 +12,9 @@ if [ -z "$version" ]; then
   exit 1
 fi
 
-# 三个模块的产物路径
-bukkit="bukkit/build/libs/EtherosLib-Bukkit-${version}.jar"
-velocity="velocity/build/libs/EtherosLib-Velocity-${version}.jar"
+# 三个模块的产物路径：bukkit / velocity 用 shadowJar 插件包，common 为普通 jar
+bukkit="bukkit/build/libs/EtherosLib-Bukkit-${version}-plugin.jar"
+velocity="velocity/build/libs/EtherosLib-Velocity-${version}-plugin.jar"
 common="common/build/libs/EtherosLib-Common-${version}.jar"
 
 # jar 存在性与完整性
@@ -80,8 +80,10 @@ if [ "$(major_of "$common" cn/etheros/etheroslib/common/EtherosLibCore.class)" !
   exit 1
 fi
 
-# 归置发布产物
+# 归置发布产物，附件使用不带 classifier 的规范命名
 mkdir -p dist
-cp "$bukkit" "$velocity" "$common" dist/
+cp "$bukkit" "dist/EtherosLib-Bukkit-${version}.jar"
+cp "$velocity" "dist/EtherosLib-Velocity-${version}.jar"
+cp "$common" "dist/EtherosLib-Common-${version}.jar"
 (cd dist && sha256sum ./*.jar > SHA256SUMS.txt)
 ls -l dist

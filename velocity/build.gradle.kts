@@ -1,6 +1,7 @@
 plugins {
-    java
+    `java-library`
     id("com.gradleup.shadow")
+    id("com.vanniktech.maven.publish")
 }
 
 description = "EtherosLib Velocity 代理端实现"
@@ -52,17 +53,13 @@ dependencies {
     compileOnly("com.velocitypowered:velocity-api:$velocityApiVersion")
     // 注解处理器生成 velocity-plugin.json
     annotationProcessor("com.velocitypowered:velocity-api:$velocityApiVersion")
-    // 跨平台核心代码随插件一起打包
-    implementation(project(":common"))
+    // 跨平台核心：编译期传递给下游，运行期随 shadowJar 打包
+    api(project(":common"))
 }
 
-// 插件产物统一由 shadowJar 输出（内含 common），普通 jar 不再单独产出
-tasks.named<Jar>("jar") {
-    enabled = false
-}
-
+// 普通 jar 用于 Maven 发布，shadowJar 作为插件产物
 tasks.named<Jar>("shadowJar") {
-    archiveClassifier.set("")
+    archiveClassifier.set("plugin")
 }
 
 // 让 build / assemble 默认产出插件包
