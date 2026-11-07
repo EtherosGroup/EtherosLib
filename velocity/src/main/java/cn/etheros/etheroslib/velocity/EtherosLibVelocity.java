@@ -13,12 +13,12 @@ import org.slf4j.Logger;
 /**
  * Velocity 代理端入口，负责把平台实现绑定到 {@link EtherosLibCore}。
  * <p>
- * {@code version} 需与 gradle.properties 中的 projectVersion 保持一致。
+ * 版本号由 Gradle 构建时生成的 {@link BuildInfo} 提供，与工程版本保持一致。
  */
 @Plugin(
         id = "etheroslib",
         name = "EtherosLib",
-        version = "1.0-SNAPSHOT",
+        version = BuildInfo.VERSION,
         description = "EtherosLib 跨平台核心库 - Velocity 实现",
         authors = {"Etheros"}
 )
@@ -36,7 +36,7 @@ public final class EtherosLibVelocity {
     @Subscribe
     public void onProxyInitialize(ProxyInitializeEvent event) {
         EtherosLibCore core = EtherosLibCore.get();
-        core.initialize(Platform.VELOCITY, "1.0-SNAPSHOT");
+        core.initialize(Platform.VELOCITY, BuildInfo.VERSION);
         logger.info("EtherosLib {} 已加载（{}）", core.getVersion(), core.getPlatform().getDisplayName());
     }
 
