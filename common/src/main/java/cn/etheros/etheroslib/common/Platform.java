@@ -2,6 +2,9 @@ package cn.etheros.etheroslib.common;
 
 /**
  * EtherosLib 运行平台。
+ *
+ * @author 西博卡兹
+ * @since 1.0.0
  */
 public enum Platform {
 

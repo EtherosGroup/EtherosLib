@@ -8,6 +8,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * 跨平台核心：记录运行平台与版本，并提供跨模块共享的服务注册表。
  * <p>
  * 各平台模块在启动时调用 {@link #initialize(Platform, String)} 完成绑定。
+ *
+ * @author 西博卡兹
+ * @since 1.0.0
  */
 public final class EtherosLibCore {
 
@@ -19,8 +22,7 @@ public final class EtherosLibCore {
     private volatile String version = "unknown";
     private volatile boolean initialized;
 
-    private EtherosLibCore() {
-    }
+    private EtherosLibCore() {}
 
     public static EtherosLibCore get() {
         return INSTANCE;

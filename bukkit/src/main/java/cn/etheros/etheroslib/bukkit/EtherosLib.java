@@ -6,6 +6,9 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 /**
  * Bukkit / Paper 平台入口，负责把平台实现绑定到 {@link EtherosLibCore}。
+ *
+ * @author 西博卡兹
+ * @since 1.0.0
  */
 public final class EtherosLib extends JavaPlugin {
 
