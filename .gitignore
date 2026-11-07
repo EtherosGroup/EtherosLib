@@ -25,3 +25,6 @@ Thumbs.db
 tmp/
 .tmpinspect/
 dist/
+
+# 本地参考仓库
+working/
