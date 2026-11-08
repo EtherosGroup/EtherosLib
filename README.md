@@ -15,7 +15,7 @@ Etheros 系列插件的跨平台核心库插件，支持 Bukkit/Paper 与 Veloci
 | `bukkit` | Bukkit / Paper | Java 8 | `cn.etheros.etheroslib:EtherosLib-Bukkit:<版本>` | `EtherosLib-Bukkit-<版本>.jar`（shadow 插件包） |
 | `velocity` | Velocity | Java 17 | `cn.etheros.etheroslib:EtherosLib-Velocity:<版本>` | `EtherosLib-Velocity-<版本>.jar`（shadow 插件包） |
 
-Maven 发布的是普通 jar（`common`、`bukkit`、`velocity` 各一份），供下游 `compileOnly` 编译；Release 附件是 shadow 插件包（`-plugin.jar`，内含 `common` 与 EtherosFramework 2.4.1），供服务器安装。`EtherosLib-Bukkit` / `EtherosLib-Velocity` 的 POM 以 compile scope 依赖 `EtherosLib-Common`，后者以 compile scope 依赖 `EtherosFramework`。
+Maven 发布的是普通 jar（`common`、`bukkit`、`velocity` 各一份），供下游 `compileOnly` 编译；Release 附件是 shadow 插件包（`-plugin.jar`，内含 `common` 与 EtherosFramework 2.5.0），供服务器安装。`EtherosLib-Bukkit` / `EtherosLib-Velocity` 的 POM 以 compile scope 依赖 `EtherosLib-Common`，后者以 compile scope 依赖 `EtherosFramework`。
 
 ## 环境与构建
 
@@ -39,9 +39,9 @@ EtherosLib 以宿主插件方式运行：
 ```kotlin
 dependencies {
     // Bukkit 端
-    compileOnly("cn.etheros.etheroslib:EtherosLib-Bukkit:1.2.1")
+    compileOnly("cn.etheros.etheroslib:EtherosLib-Bukkit:1.3.0")
     // Velocity 端
-    // compileOnly("cn.etheros.etheroslib:EtherosLib-Velocity:1.2.1")
+    // compileOnly("cn.etheros.etheroslib:EtherosLib-Velocity:1.3.0")
 }
 ```
 
@@ -89,6 +89,35 @@ public final class YourPlugin extends JavaPlugin {
 | `getPlatform()` / `getVersion()` | 当前平台与版本 |
 | `registerService(Class, T)` / `getService(Class)` / `requireService(Class)` | 跨模块服务注册表 |
 | `clearServices()` | 平台关闭时清理 |
+
+## 日志注入
+
+`@Log` 把平台日志器注入到 `Logger` 字段，后端按平台品牌自动选择：
+
+| 平台 | 后端 | 输出 |
+|---|---|---|
+| Bukkit / Paper | JDK JUL（`JdkLogBackend`） | 服务端控制台 |
+| Velocity | SLF4J（`Slf4jLogBackend`） | 代理端日志 |
+| 未安装后端（测试 / 独立使用） | JDK JUL | 控制台 |
+
+```java
+@Service
+public class AuthService {
+    @Log              private Logger logger;    // 名字 = <logger.name>.AuthService
+    @Log("database")  private Logger dbLogger;  // 名字 = <logger.name>.database
+}
+```
+
+日志名前缀取插件 jar 根目录 `application.properties` 的 `logger.name`，缺省为 `Etheros`：
+
+```properties
+logger.name=EtherosAuth
+```
+
+- 注入在 `@PostConstruct` 之前完成；
+- 字段类型必须是 `cn.etheros.etheroslib.common.log.Logger`；
+- 需要宿主 EtherosLib 已加载（平台入口负责安装后端、注册注入器）：Bukkit 侧 `depend: [EtherosLib]`，Velocity 侧 `@Dependency(id = "etheroslib")`；
+- `logger.debug(...)` 是否输出由平台日志级别决定（JUL 对应 `FINE`）。
 
 ## 事件总线
 
@@ -225,6 +254,7 @@ Bukkit 后端额外注册：`Player`、`OfflinePlayer`、`World`、`Material`。
 | `@GlobalService` | — | 创建后注册到 `SharedContext`，可被其他插件注入 |
 | `@Autowired` | 本插件容器 → `SharedContext` | 默认用法，本地优先、宿主兜底 |
 | `@GlobalAutowired` | `SharedContext` → 本插件容器 | 同名冲突时优先取宿主那份 |
+| `@Log` | — | 注入平台日志器，见「日志注入」 |
 
 `required = false` 时找不到返回 `null`；字段必须显式标注注入注解，构造器参数可省略注解。
 
@@ -240,6 +270,7 @@ EtherosLib/
 │       ├── EtherosLibCore.java
 │       ├── Platform.java
 │       ├── event/               # 事件总线实现
+│       ├── log/                 # @Log、Logger 门面、后端 SPI、JUL 后端、注入器
 │       └── command/             # 命令框架核心（注解、命令树、参数、补全）
 ├── bukkit/                      # Bukkit/Paper 平台实现
 │   └── src/main/java/cn/etheros/etheroslib/bukkit/
@@ -249,7 +280,8 @@ EtherosLib/
 ├── velocity/                    # Velocity 平台实现
 │   └── src/main/java/cn/etheros/etheroslib/velocity/
 │       ├── EtherosLibVelocity.java
-│       └── event/VelocityEventBus.java
+│       ├── event/VelocityEventBus.java
+│       └── log/Slf4jLogBackend.java
 └── .github/
     ├── workflows/ci.yml         # push/PR：构建、测试、产物校验
     ├── workflows/release.yml    # tag：构建并发布 GitHub Release
@@ -261,7 +293,7 @@ EtherosLib/
 - `ci.yml`：推 `master` 与 PR 时构建、跑测试、校验产物（jar 完整性、插件元数据、common/framework 合并、字节码版本）；
 - `release.yml`：推送 `v*` 标签时构建并创建 GitHub Release，附件为三个插件 jar 与 `SHA256SUMS.txt`；
 - `publish.yml`：推送 `v*` 标签或手动触发时构建并发布到 Maven Central，需要仓库 Secrets：`MAVEN_CENTRAL_USERNAME`、`MAVEN_CENTRAL_PASSWORD`、`GPG_SIGNING_KEY`、`GPG_SIGNING_PASSWORD`；
-- 发版流程：修改 `gradle.properties` 的 `projectVersion` → 提交 → 打同名标签（如 `v1.2.1`）→ 推送，`release.yml` 与 `publish.yml` 同时执行；标签与工程版本不一致时发布会失败。
+- 发版流程：修改 `gradle.properties` 的 `projectVersion` → 提交 → 打同名标签（如 `v1.3.0`）→ 推送，`release.yml` 与 `publish.yml` 同时执行；标签与工程版本不一致时发布会失败。
 
 ## 兼容性
 

@@ -1,8 +1,12 @@
 package cn.etheros.etheroslib.velocity;
 
 import cn.etheros.etherosframework.di.core.ApplicationContext;
+import cn.etheros.etherosframework.di.spi.FieldInjectionProviders;
 import cn.etheros.etheroslib.common.EtherosLibCore;
 import cn.etheros.etheroslib.common.Platform;
+import cn.etheros.etheroslib.common.log.EtherosLog;
+import cn.etheros.etheroslib.common.log.LogFieldInjector;
+import cn.etheros.etheroslib.velocity.log.Slf4jLogBackend;
 import com.google.inject.Inject;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
@@ -41,6 +45,9 @@ public final class EtherosLibVelocity {
 
     @Subscribe
     public void onProxyInitialize(ProxyInitializeEvent event) {
+        // Velocity 提供 SLF4J；先安装后端与注入器，再启动容器
+        EtherosLog.installBackend(new Slf4jLogBackend());
+        FieldInjectionProviders.register(new LogFieldInjector());
         context = ApplicationContext.run(EtherosLibVelocity.class);
         EtherosLibCore core = EtherosLibCore.get();
         core.initialize(Platform.VELOCITY, BuildInfo.VERSION);

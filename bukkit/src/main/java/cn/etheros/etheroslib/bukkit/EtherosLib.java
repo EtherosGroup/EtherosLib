@@ -1,7 +1,11 @@
 package cn.etheros.etheroslib.bukkit;
 
 import cn.etheros.etherosframework.di.core.ApplicationContext;
+import cn.etheros.etherosframework.di.spi.FieldInjectionProviders;
 import cn.etheros.etheroslib.common.EtherosLibCore;
+import cn.etheros.etheroslib.common.log.EtherosLog;
+import cn.etheros.etheroslib.common.log.LogFieldInjector;
+import cn.etheros.etheroslib.common.log.backend.JdkLogBackend;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /**
@@ -16,6 +20,9 @@ public final class EtherosLib extends JavaPlugin {
 
     @Override
     public void onEnable() {
+        // Bukkit 原生日志体系是 JUL；先安装后端与注入器，再启动容器
+        EtherosLog.installBackend(new JdkLogBackend());
+        FieldInjectionProviders.register(new LogFieldInjector());
         context = ApplicationContext.run(EtherosLib.class);
     }
 
