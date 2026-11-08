@@ -11,10 +11,11 @@ import java.util.logging.LogRecord;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * JUL 后端的等级映射与 debug 开关。
+ * JUL 后端的等级映射、debug 开关与 {@code {}} 占位符。
  */
 class JdkLogBackendTest {
 
@@ -22,20 +23,7 @@ class JdkLogBackendTest {
     void testLevelMapping() {
         java.util.logging.Logger jul = java.util.logging.Logger.getLogger("TestLib.Jdk");
         List<LogRecord> records = new ArrayList<LogRecord>();
-        Handler handler = new Handler() {
-            @Override
-            public void publish(LogRecord record) {
-                records.add(record);
-            }
-
-            @Override
-            public void flush() {
-            }
-
-            @Override
-            public void close() {
-            }
-        };
+        Handler handler = new CapturingHandler(records);
 
         Level originalLevel = jul.getLevel();
         jul.addHandler(handler);
@@ -69,6 +57,56 @@ class JdkLogBackendTest {
             assertFalse(logger.isDebugEnabled());
         } finally {
             jul.setLevel(null);
+        }
+    }
+
+    @Test
+    void testVarargsFormatting() {
+        java.util.logging.Logger jul = java.util.logging.Logger.getLogger("TestLib.JdkVarargs");
+        List<LogRecord> records = new ArrayList<LogRecord>();
+        Handler handler = new CapturingHandler(records);
+        Level originalLevel = jul.getLevel();
+        jul.addHandler(handler);
+        jul.setLevel(Level.ALL);
+        try {
+            Logger logger = new JdkLogBackend().create("TestLib.JdkVarargs");
+            RuntimeException boom = new RuntimeException("boom");
+
+            logger.warn("a {} {}", 1, 2);
+            logger.error("失败 {}", "x", boom);
+
+            assertEquals(2, records.size());
+            assertEquals("a 1 2", records.get(0).getMessage());
+            assertEquals(Level.WARNING, records.get(0).getLevel());
+            assertEquals("失败 x", records.get(1).getMessage());
+            assertEquals(Level.SEVERE, records.get(1).getLevel());
+            assertSame(boom, records.get(1).getThrown());
+        } finally {
+            jul.removeHandler(handler);
+            jul.setLevel(originalLevel);
+        }
+    }
+
+    private static final class CapturingHandler extends Handler {
+
+        private final List<LogRecord> records;
+
+        private CapturingHandler(List<LogRecord> records) {
+            this.records = records;
+            setLevel(Level.ALL);
+        }
+
+        @Override
+        public void publish(LogRecord record) {
+            records.add(record);
+        }
+
+        @Override
+        public void flush() {
+        }
+
+        @Override
+        public void close() {
         }
     }
 }

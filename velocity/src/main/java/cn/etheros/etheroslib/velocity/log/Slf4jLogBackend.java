@@ -71,6 +71,26 @@ public final class Slf4jLogBackend implements LogBackend {
         }
 
         @Override
+        public void info(String format, Object... args) {
+            delegate.info(format, args);
+        }
+
+        @Override
+        public void warn(String format, Object... args) {
+            delegate.warn(format, args);
+        }
+
+        @Override
+        public void error(String format, Object... args) {
+            delegate.error(format, args);
+        }
+
+        @Override
+        public void debug(String format, Object... args) {
+            delegate.debug(format, args);
+        }
+
+        @Override
         public boolean isDebugEnabled() {
             return delegate.isDebugEnabled();
         }

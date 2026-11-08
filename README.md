@@ -92,7 +92,7 @@ public final class YourPlugin extends JavaPlugin {
 
 ## 日志注入
 
-`@Log` 把平台日志器注入到 `Logger` 字段，后端按平台品牌自动选择：
+`@InjectLogger` 把平台日志器注入到 `Logger` 字段，后端按平台品牌自动选择：
 
 | 平台 | 后端 | 输出 |
 |---|---|---|
@@ -100,13 +100,43 @@ public final class YourPlugin extends JavaPlugin {
 | Velocity | SLF4J（`Slf4jLogBackend`） | 代理端日志 |
 | 未安装后端（测试 / 独立使用） | JDK JUL | 控制台 |
 
+### 类级用法（推荐）
+
+给类打注解，类中所有已声明的 `Logger` 字段自动注入；**框架不生成字段**，字段仍需自行声明：
+
+```java
+@InjectLogger
+@Service
+public class AuthService {
+    private Logger logger;     // 名字 = <logger.name>.AuthService
+    private Logger dbLogger;   // 多个字段：<logger.name>.AuthService.dbLogger
+}
+```
+
+### 字段级用法
+
+只注入标注的字段，可用 `value` 指定后缀：
+
 ```java
 @Service
 public class AuthService {
-    @Log              private Logger logger;    // 名字 = <logger.name>.AuthService
-    @Log("database")  private Logger dbLogger;  // 名字 = <logger.name>.database
+    @InjectLogger("database")
+    private Logger dbLogger;   // 名字 = <logger.name>.database
 }
 ```
+
+### 占位符
+
+`{}` 为 SLF4J 风格占位符，Bukkit 与 Velocity 两端语义一致：
+
+```java
+logger.warn("玩家 {} 在 {} 登录失败", playerName, time);
+logger.error("加载失败", exception);            // 末尾 Throwable 按异常输出（带堆栈）
+logger.info("{} 和 {}", "only");                // 参数不足时保留原样：only 和 {}
+logger.warn("a {} b", 1, 2);                    // 多余参数追加到末尾：a 1 b 2
+```
+
+`logger.debug(...)` 是否输出由平台日志级别决定（JUL 对应 `FINE`）。
 
 日志名前缀取插件 jar 根目录 `application.properties` 的 `logger.name`，缺省为 `Etheros`：
 
@@ -115,9 +145,8 @@ logger.name=EtherosAuth
 ```
 
 - 注入在 `@PostConstruct` 之前完成；
-- 字段类型必须是 `cn.etheros.etheroslib.common.log.Logger`；
-- 需要宿主 EtherosLib 已加载（平台入口负责安装后端、注册注入器）：Bukkit 侧 `depend: [EtherosLib]`，Velocity 侧 `@Dependency(id = "etheroslib")`；
-- `logger.debug(...)` 是否输出由平台日志级别决定（JUL 对应 `FINE`）。
+- `Logger` 字段类型：`cn.etheros.etheroslib.common.log.Logger`，`static` 字段不支持；
+- 需要宿主 EtherosLib 已加载（平台入口负责安装后端、注册注入器）：Bukkit 侧 `depend: [EtherosLib]`，Velocity 侧 `@Dependency(id = "etheroslib")`。
 
 ## 事件总线
 
@@ -350,7 +379,7 @@ Bukkit 后端额外注册：`Player`、`OfflinePlayer`、`World`、`Material`。
 | `@GlobalService` | — | 创建后注册到 `SharedContext`，可被其他插件注入 |
 | `@Autowired` | 本插件容器 → `SharedContext` | 默认用法，本地优先、宿主兜底 |
 | `@GlobalAutowired` | `SharedContext` → 本插件容器 | 同名冲突时优先取宿主那份 |
-| `@Log` | — | 注入平台日志器，见「日志注入」 |
+| `@InjectLogger` | — | 注入平台日志器（类级 / 字段级），见「日志注入」 |
 
 `required = false` 时找不到返回 `null`；字段必须显式标注注入注解，构造器参数可省略注解。
 
@@ -366,7 +395,7 @@ EtherosLib/
 │       ├── EtherosLibCore.java
 │       ├── Platform.java
 │       ├── event/               # 事件总线实现
-│       ├── log/                 # @Log、Logger 门面、后端 SPI、JUL 后端、注入器
+│       ├── log/                 # @InjectLogger、Logger 门面、{} 占位符、后端 SPI、JUL 后端、注入器
 │       └── command/             # 命令框架核心（声明、命令树、错误上下文、补全）
 ├── bukkit/                      # Bukkit/Paper 平台实现
 │   └── src/main/java/cn/etheros/etheroslib/bukkit/
