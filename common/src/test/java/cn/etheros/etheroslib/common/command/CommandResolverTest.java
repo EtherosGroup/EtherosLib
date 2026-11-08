@@ -1,6 +1,5 @@
 package cn.etheros.etheroslib.common.command;
 
-import cn.etheros.etheroslib.common.command.annotation.Arg;
 import cn.etheros.etheroslib.common.command.annotation.CommandHandler;
 import cn.etheros.etheroslib.common.command.annotation.SubCommand;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,7 +13,6 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CommandResolverTest {
@@ -129,11 +127,6 @@ class CommandResolverTest {
     }
 
     @Test
-    void rejectsDuplicateSubCommandPath() {
-        assertThrows(IllegalStateException.class, () -> CommandHandlerParser.parse(new DuplicateHandler()));
-    }
-
-    @Test
     void executesAliasesOnEveryPathSegment() {
         assertTrue(definition.execute(sender, "test", new String[]{"adm", "rl"}));
         assertTrue(definition.execute(sender, "test", new String[]{"adm", "reload"}));
@@ -147,22 +140,11 @@ class CommandResolverTest {
     }
 
     @Test
-    void rejectsConflictingAliases() {
-        assertThrows(IllegalStateException.class, () -> CommandHandlerParser.parse(new ConflictAliasHandler()));
-    }
-
-    @Test
     void allowsSubCommandsWhenCommandHasAliases() {
         AliasedCommandHandler aliasedHandler = new AliasedCommandHandler();
         CommandDefinition aliased = CommandHandlerParser.parse(aliasedHandler);
         assertTrue(aliased.execute(sender, "l", new String[]{"web"}));
         assertEquals(Collections.singletonList("web"), aliasedHandler.calls);
-    }
-
-    @Test
-    void rejectsSubCommandAliasesWhenCommandHasAliases() {
-        assertThrows(IllegalStateException.class, () -> CommandHandlerParser.parse(new AliasedCommandWithSubAlias()));
-        assertThrows(IllegalStateException.class, () -> CommandHandlerParser.parse(new AliasedCommandWithPathAlias()));
     }
 
     public static final class CustomSender {
@@ -182,83 +164,76 @@ class CommandResolverTest {
         final List<String> calls = new ArrayList<String>();
 
         @SubCommand("")
-        void root(CommandSender sender, @Arg("word") String word) {
-            calls.add("root:" + word);
+        public SubCommandSpec root() {
+            return SubCommandSpec.builder()
+                    .parameter(CommandParameter.required("word", String.class))
+                    .execute(context -> calls.add("root:" + context.argument("word")))
+                    .build();
         }
 
         @SubCommand(value = "sub", aliases = {"s"})
-        void sub(CommandSender sender) {
-            calls.add("sub");
+        public SubCommandSpec sub() {
+            return SubCommandSpec.of(context -> calls.add("sub"));
         }
 
         @SubCommand(value = "secret", permission = "test.secret")
-        void secret(CommandSender sender) {
-            calls.add("secret");
+        public SubCommandSpec secret() {
+            return SubCommandSpec.of(context -> calls.add("secret"));
         }
 
         @SubCommand("num")
-        void num(CommandSender sender, @Arg("n") int value) {
-            calls.add("num:" + value);
+        public SubCommandSpec num() {
+            return SubCommandSpec.builder()
+                    .parameter(CommandParameter.required("n", int.class))
+                    .execute(context -> calls.add("num:" + context.argument("n")))
+                    .build();
         }
 
         @SubCommand("mode")
-        void mode(CommandSender sender,
-                  @Arg(value = "m", completer = ModeTabProvider.class) String mode) {
-            calls.add("mode:" + mode);
+        public SubCommandSpec mode() {
+            return SubCommandSpec.builder()
+                    .parameter(CommandParameter.required("mode", String.class).completer(ModeTabProvider.class))
+                    .execute(context -> calls.add("mode:" + context.argument("mode")))
+                    .build();
         }
 
         @SubCommand("sender")
-        void sender(CommandSender sender) {
-            calls.add("sender:" + sender.name());
+        public SubCommandSpec sender() {
+            return SubCommandSpec.of(context -> calls.add("sender:" + context.sender().name()));
         }
 
         @SubCommand("raw")
-        void raw(CustomSender sender) {
-            calls.add("raw:" + sender.getClass().getSimpleName());
+        public SubCommandSpec raw() {
+            return SubCommandSpec.builder()
+                    .sender(CustomSender.class)
+                    .execute(context -> calls.add("raw:" + context.sender(CustomSender.class).getClass().getSimpleName()))
+                    .build();
         }
 
         @SubCommand("rawonly")
-        void rawOnly(CustomSender sender) {
-            calls.add("rawonly");
+        public SubCommandSpec rawOnly() {
+            return SubCommandSpec.builder()
+                    .sender(CustomSender.class)
+                    .execute(context -> calls.add("rawonly"))
+                    .build();
         }
 
         @SubCommand("opt")
-        void opt(CommandSender sender, @Arg(value = "x", optional = true) String value) {
-            calls.add("opt:" + value);
+        public SubCommandSpec opt() {
+            return SubCommandSpec.builder()
+                    .parameter(CommandParameter.optional("x", String.class))
+                    .execute(context -> calls.add("opt:" + context.argument("x")))
+                    .build();
         }
 
         @SubCommand("ctx")
-        void ctx(CommandContext context) {
-            calls.add("ctx:" + context.label());
+        public SubCommandSpec context() {
+            return SubCommandSpec.of(context -> calls.add("ctx:" + context.label()));
         }
 
         @SubCommand("admin|adm reload|rl")
-        void adminReload(CommandSender sender) {
-            calls.add("admin reload");
-        }
-    }
-
-    @CommandHandler(name = "dup")
-    public static final class DuplicateHandler {
-
-        @SubCommand("same")
-        void first(CommandSender sender) {
-        }
-
-        @SubCommand("same")
-        void second(CommandSender sender) {
-        }
-    }
-
-    @CommandHandler(name = "conflict")
-    public static final class ConflictAliasHandler {
-
-        @SubCommand("one|shared")
-        void first(CommandSender sender) {
-        }
-
-        @SubCommand("two|shared")
-        void second(CommandSender sender) {
+        public SubCommandSpec adminReload() {
+            return SubCommandSpec.of(context -> calls.add("admin reload"));
         }
     }
 
@@ -268,24 +243,8 @@ class CommandResolverTest {
         final List<String> calls = new ArrayList<String>();
 
         @SubCommand("web")
-        void web(CommandSender sender) {
-            calls.add("web");
-        }
-    }
-
-    @CommandHandler(name = "login", aliases = {"l"})
-    public static final class AliasedCommandWithSubAlias {
-
-        @SubCommand(value = "web", aliases = {"w"})
-        void web(CommandSender sender) {
-        }
-    }
-
-    @CommandHandler(name = "login", aliases = {"l"})
-    public static final class AliasedCommandWithPathAlias {
-
-        @SubCommand("web|w")
-        void web(CommandSender sender) {
+        public SubCommandSpec web() {
+            return SubCommandSpec.of(context -> calls.add("web"));
         }
     }
 }

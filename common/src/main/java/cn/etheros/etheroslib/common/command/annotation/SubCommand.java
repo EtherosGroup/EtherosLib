@@ -6,8 +6,10 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * 子命令，标注在方法上
+ * 子命令，标注在注册期工厂方法上
  *
+ * <p>被标注的方法必须无参、返回
+ * {@code cn.etheros.etheroslib.common.command.SubCommandSpec}，注册时调用一次并构建命令树
  * <p>value 为空格分隔的路径，如 {@code "admin reload"}；空串表示根执行器
  * <p>命令未声明别名时，每段可写 {@code 规范名|别名1|别名2}，中间段同样支持
  * <p>aliases 作为最后一段的补充别名；命令已声明别名时两者都不允许使用

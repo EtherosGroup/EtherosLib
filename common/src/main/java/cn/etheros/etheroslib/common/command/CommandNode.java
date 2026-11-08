@@ -12,7 +12,7 @@ import java.util.Set;
 /**
  * 命令树节点
  *
- * <p>children 存规范名，aliases 存别名，均为小写键
+ * <p>children 存规范名，aliases 存别名，均为小写键；action 为空表示纯路径节点
  *
  * @author 西博卡兹
  * @since 1.1.0
@@ -25,7 +25,7 @@ final class CommandNode {
     private final Map<String, CommandNode> aliases = new LinkedHashMap<String, CommandNode>();
     private final Set<CommandNode> childNodes = new LinkedHashSet<CommandNode>();
 
-    private CommandMethod method;
+    private CommandAction action;
     private String permission = "";
     private String description = "";
     private String usage = "";
@@ -43,12 +43,12 @@ final class CommandNode {
         return parent;
     }
 
-    CommandMethod method() {
-        return method;
+    CommandAction action() {
+        return action;
     }
 
-    void setMethod(CommandMethod method) {
-        this.method = method;
+    void setAction(CommandAction action) {
+        this.action = action;
     }
 
     String permission() {

@@ -8,7 +8,8 @@ import java.lang.annotation.Target;
 /**
  * 命令处理器，标注在命令类上
  *
- * <p>同一插件内 name 不可重复；命令通过 {@code CommandHandlerRegistry#register} 注册
+ * <p>同一插件内 name 不可重复；命令由平台注册表注册（如 {@code BukkitCommandRegistry}）
+ * <p>命令类可实现 {@code CommandErrorHandler}，作为该命令所有子命令的默认错误文案来源
  * <p>aliases 作用于整个命令，声明后子命令不允许再声明别名
  *
  * @author 西博卡兹

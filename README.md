@@ -3,7 +3,7 @@
 Etheros 系列插件的跨平台核心库插件，支持 Bukkit/Paper 与 Velocity。
 
 - 事件总线：跨插件共享的 `BusEvent` 投递，平台侧薄适配
-- 命令框架：注解声明命令、子命令、参数解析与 Tab 补全，执行与补全共用一棵命令树
+- 命令框架：注解声明命令与子命令，注册期构建发送者、参数与执行器，统一错误处理与 Tab 补全
 - DI：基于 [EtherosFramework](https://github.com/EtherosGroup/EtherosFramework) 的容器、全局 Bean 共享与生命周期
 - 平台核心：记录运行平台与版本，提供跨模块服务注册表
 
@@ -39,9 +39,9 @@ EtherosLib 以宿主插件方式运行：
 ```kotlin
 dependencies {
     // Bukkit 端
-    compileOnly("cn.etheros.etheroslib:EtherosLib-Bukkit:1.3.0")
+    compileOnly("cn.etheros.etheroslib:EtherosLib-Bukkit:2.0.0")
     // Velocity 端
-    // compileOnly("cn.etheros.etheroslib:EtherosLib-Velocity:1.3.0")
+    // compileOnly("cn.etheros.etheroslib:EtherosLib-Velocity:2.0.0")
 }
 ```
 
@@ -160,40 +160,52 @@ EtherosFramework 2.1.0 起，`BusEvent` 在设置载荷时逐项校验：
 
 ### 声明
 
+`@CommandHandler` 声明命令；`@SubCommand` 标注的方法是**注册期工厂**：无参、返回 `SubCommandSpec`。
+发送者、参数、执行器与错误文案都在工厂里声明，注册时调用一次并构建命令树。
+
 ```java
 @CommandHandler(name = "auth", aliases = {"a"}, permission = "etherosauth.use",
         description = "认证命令")
 public final class AuthCommand {
 
-    // 根执行器：/auth <玩家>
-    @SubCommand("")
-    public void root(CommandSender sender, @Arg("玩家") String player) {
-        // ...
+    // /auth info
+    @SubCommand("info")
+    public SubCommandSpec info() {
+        return SubCommandSpec.builder()
+                .sender(Player.class)                                    // 只允许玩家执行
+                .parameter(CommandParameter.required("password", String.class))
+                .onError(CommandError.PLAYER_ONLY, "请以玩家身份执行")
+                .execute(context -> {
+                    Player player = context.sender(Player.class);
+                    String password = context.argument("password");
+                    // ...
+                })
+                .build();
     }
 
-    // /auth login <密码>，别名 /auth l
-    @SubCommand(value = "login", aliases = {"l"}, permission = "etherosauth.login")
-    public void login(Player player, @Arg("密码") String password) {
-        // ...
+    // /auth admin mode <mode>，路径每段可写别名
+    @SubCommand("admin|adm mode|m")
+    public SubCommandSpec mode() {
+        return SubCommandSpec.builder()
+                .parameter(CommandParameter.required("mode", String.class)
+                        .completer(ModeCompleter.class))
+                .execute(context -> {
+                    String mode = context.argument("mode");
+                    // ...
+                })
+                .build();
     }
 
-    // /auth admin reload，路径每段可写别名
-    @SubCommand("admin|adm reload|rl")
-    public void reload(CommandSender sender) {
-        // ...
-    }
-
-    // 自定义补全
-    @SubCommand("admin mode")
-    public void mode(CommandSender sender,
-                     @Arg(value = "模式", completer = ModeCompleter.class) String mode) {
-        // ...
-    }
-
-    // 可选参数，非基本类型
+    // /auth admin limit [limit]
     @SubCommand("admin limit")
-    public void limit(CommandSender sender, @Arg(value = "上限", optional = true) Integer limit) {
-        // ...
+    public SubCommandSpec limit() {
+        return SubCommandSpec.builder()
+                .parameter(CommandParameter.optional("limit", Integer.class))
+                .execute(context -> {
+                    Integer limit = context.argument("limit");   // 未提供时为 null
+                    // ...
+                })
+                .build();
     }
 }
 ```
@@ -208,6 +220,17 @@ public final class ModeCompleter implements TabProvider {
 }
 ```
 
+### 发送者与参数
+
+| 事项 | 说明 |
+|---|---|
+| 发送者声明 | `.sender(Class)`，默认 `CommandSender`；声明平台类型（如 `Player`）时框架校验并注入 |
+| 发送者读取 | `context.sender(Player.class)`；`context.sender()` 取 `CommandSender` 抽象，`context.rawSender()` 取平台原始对象 |
+| 参数声明 | `CommandParameter.required/optional(名字, 类型)`，按声明顺序解析；自定义 `ArgumentType` 直接传入 |
+| 参数读取 | `context.argument("name")` 按赋值目标推断类型；`context.argument("name", Class)` 带类型检查 |
+| 可选参数 | 未提供时读取结果为 `null` |
+| 参数名 | 同时是查找键与错误/i18n 素材，建议使用稳定英文名（如 `password`），显示文案由 i18n 层翻译 |
+
 ### 注册
 
 ```java
@@ -216,6 +239,7 @@ private BukkitCommandRegistry commandRegistry;
 
 @Override
 public void onEnable() {
+    commandRegistry.setDefaultErrorHandler(this, i18n::message);   // 可选，插件级默认错误文案
     commandRegistry.register(this, new AuthCommand());
 }
 
@@ -226,6 +250,77 @@ public void onDisable() {
 ```
 
 `register` 把命令注册到 Bukkit `CommandMap`，不需要在 `plugin.yml` 里重复声明命令；注销时从 `CommandMap` 移除并清理别名。
+工厂方法在注册阶段调用，依赖注入须在注册前完成。
+
+### 错误处理
+
+框架把命令失败归为 7 种错误类型：
+
+| `CommandError` | 触发 | 上下文可用字段 | 内置默认文案 |
+|---|---|---|---|
+| `NO_PERMISSION` | 命令级或子命令级权限不足 | `permission`、`path` | `无权限：<perm>` |
+| `PLAYER_ONLY` | 声明游戏玩家类型，执行者不是玩家 | `requiredSenderType` | `该命令只能由玩家执行` |
+| `SENDER_MISMATCH` | 其他发送者类型不匹配 | `requiredSenderType` | `命令执行者类型不匹配：<类型>` |
+| `NO_EXECUTOR` | 节点没有执行器，只有子命令 | `usage`、`path` | 用法文案 |
+| `INVALID_ARGUMENT_COUNT` | 必选参数缺失或参数过多 | `usage`、`minArguments`、`maxArguments` | 用法文案 |
+| `INVALID_ARGUMENT` | 参数解析失败 | `argumentName`、`argumentInput`、`detail` | `错误：参数无效：<名>：<原因>` |
+| `EXECUTION_ERROR` | 执行器抛异常 | `exception` | `命令执行出错：<消息>` |
+
+错误文案按以下顺序查找，任一返回 `null` 继续回退，返回空串表示已处理、不再发送：
+
+1. 子命令 `.onError(错误类型, 文案 / 处理器)`
+2. 子命令 `.onError(处理器)` 兜底
+3. 命令类实现 `CommandErrorHandler`
+4. 注册表 `setDefaultErrorHandler(plugin, handler)`
+5. 内置默认文案
+
+每个错误都会构造 `CommandErrorContext`，可用 `command()`、`label()`、`path()`、`error()` 拼 i18n key，`defaultMessage()` 取内置文案。
+
+执行器的异常语义：抛 `CommandArgumentException` 视为参数无效（`INVALID_ARGUMENT`）；其他异常按 `EXECUTION_ERROR` 处理——有自定义处理器则发送文案，否则按原样重新抛出。
+
+### i18n 接入
+
+参数名建议用稳定英文键；翻译层负责把参数名、错误文案映射到当前语言：
+
+```java
+@CommandHandler(name = "auth")
+public final class AuthCommand implements CommandErrorHandler {
+
+    @Autowired
+    private Messages messages;   // 插件自己的 i18n 门面
+
+    @SubCommand("info")
+    public SubCommandSpec info() {
+        return SubCommandSpec.builder()
+                .parameter(CommandParameter.required("password", String.class))
+                .execute(context -> {
+                    String password = context.argument("password");
+                })
+                .build();
+    }
+
+    @Override
+    public String message(CommandErrorContext context) {
+        if (context.error() != CommandError.INVALID_ARGUMENT) {
+            return null;   // 其他错误走注册表默认或内置默认
+        }
+        String name = messages.get("arg." + context.argumentName());   // arg.password → 密码 / password
+        return messages.get("command.invalid-argument", name, context.detail());
+    }
+}
+```
+
+```yaml
+# zh.yml
+arg.password: "密码"
+command.invalid-argument: "参数无效：{0}：{1}"
+
+# en.yml
+arg.password: "password"
+command.invalid-argument: "Invalid argument: {0}: {1}"
+```
+
+参数名只做查找键与 i18n key 后缀，显示文案由翻译层负责。内置用法文案由参数名拼接；需要用法也完全本地化时，可在 `CommandErrorHandler` 里按 `command()`、`path()` 自行拼装，或用 `defaultMessage()` 拼接兜底文案。
 
 ### 规则
 
@@ -234,10 +329,11 @@ public void onDisable() {
 | 命令别名 | `@CommandHandler.aliases` 作用于整个命令，声明后子命令不允许再声明别名（`@SubCommand.aliases` 与路径 `|` 都会报错） |
 | 子命令别名 | 命令未声明别名时，路径每段可写 `规范名|别名`；`@SubCommand.aliases` 作为最后一段的补充别名 |
 | 路径 | 空格分隔多级子命令，如 `admin reload` |
-| 发送者 | 方法第一个参数不带 `@Arg` 时视为发送者：可声明 `CommandSender`、平台类型（如 `Player`）或 `CommandContext` |
-| 参数 | 其余参数必须标 `@Arg`，`optional = true` 表示可省略，基本类型不可选 |
+| 发送者 | `.sender(Class)` 声明；不声明时任意发送者均可执行 |
+| 参数 | 按 `SubCommandSpec` 中 `CommandParameter` 的声明顺序解析，数量不符报 `INVALID_ARGUMENT_COUNT` |
 | 权限 | 命令级与子命令级权限分开校验，补全时无权限的子命令与候选隐藏 |
-| 自动提示 | 权限不足、参数数量不符、解析失败、非玩家执行都有对应提示 |
+| 错误 | 统一走 `CommandError` 与 `CommandErrorHandler`，见「错误处理」 |
+| 补全 | 子命令名 + 参数类型的 `suggest`，可用 `.completer(...)` 覆盖 |
 
 ### 参数类型
 
@@ -271,7 +367,7 @@ EtherosLib/
 │       ├── Platform.java
 │       ├── event/               # 事件总线实现
 │       ├── log/                 # @Log、Logger 门面、后端 SPI、JUL 后端、注入器
-│       └── command/             # 命令框架核心（注解、命令树、参数、补全）
+│       └── command/             # 命令框架核心（声明、命令树、错误上下文、补全）
 ├── bukkit/                      # Bukkit/Paper 平台实现
 │   └── src/main/java/cn/etheros/etheroslib/bukkit/
 │       ├── EtherosLib.java
@@ -293,13 +389,14 @@ EtherosLib/
 - `ci.yml`：推 `master` 与 PR 时构建、跑测试、校验产物（jar 完整性、插件元数据、common/framework 合并、字节码版本）；
 - `release.yml`：推送 `v*` 标签时构建并创建 GitHub Release，附件为三个插件 jar 与 `SHA256SUMS.txt`；
 - `publish.yml`：推送 `v*` 标签或手动触发时构建并发布到 Maven Central，需要仓库 Secrets：`MAVEN_CENTRAL_USERNAME`、`MAVEN_CENTRAL_PASSWORD`、`GPG_SIGNING_KEY`、`GPG_SIGNING_PASSWORD`；
-- 发版流程：修改 `gradle.properties` 的 `projectVersion` → 提交 → 打同名标签（如 `v1.3.0`）→ 推送，`release.yml` 与 `publish.yml` 同时执行；标签与工程版本不一致时发布会失败。
+- 发版流程：修改 `gradle.properties` 的 `projectVersion` → 提交 → 打同名标签（如 `v2.0.0`）→ 推送，`release.yml` 与 `publish.yml` 同时执行；标签与工程版本不一致时发布会失败。
 
 ## 兼容性
 
 - Bukkit/Paper：以 `paper-api 1.12` 编译，Java 8 字节码；
 - Velocity：以 `velocity-api 3.4.0` 编译，Java 17 字节码；
 - 命令框架当前提供 Bukkit 后端，Velocity/BungeeCord 后端按平台需要接入；
+- 命令框架 2.0 起改为注册期 `SubCommandSpec` 声明，旧式反射声明（方法形参 + `@Arg`）已移除；
 - 事件总线已覆盖 Bukkit 与 Velocity。
 
 ## 许可

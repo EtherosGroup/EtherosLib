@@ -3,6 +3,7 @@ package cn.etheros.etheroslib.common.command;
 import cn.etheros.etheroslib.common.command.annotation.CommandHandler;
 import cn.etheros.etheroslib.common.command.annotation.SubCommand;
 
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.Objects;
@@ -10,9 +11,11 @@ import java.util.Objects;
 /**
  * 注解解析，生成命令定义
  *
- * <p>路径每段支持 {@code 规范名|别名1|别名2}，别名写在段内
- * <p>{@link SubCommand#aliases()} 作为最后一段的补充别名
- * <p>命令声明 aliases 时，子命令不允许再声明别名
+ * <p>{@link SubCommand} 标注的方法是无参工厂，注册时调用一次并返回 {@link SubCommandSpec}；
+ * 不再解析方法签名与参数
+ * <p>命令类可实现 {@link CommandErrorHandler}，作为该命令所有子命令的默认文案来源
+ * <p>路径每段支持 {@code 规范名|别名1|别名2}，别名写在段内；{@link SubCommand#aliases()}
+ * 作为最后一段的补充别名；命令声明 aliases 时，子命令不允许再声明别名
  *
  * @author 西博卡兹
  * @since 1.1.0
@@ -23,6 +26,10 @@ public final class CommandHandlerParser {
     }
 
     public static CommandDefinition parse(Object handler) {
+        return parse(handler, null);
+    }
+
+    public static CommandDefinition parse(Object handler, CommandErrorHandler defaultErrorHandler) {
         Objects.requireNonNull(handler, "handler");
         Class<?> type = handler.getClass();
         CommandHandler annotation = type.getAnnotation(CommandHandler.class);
@@ -48,10 +55,10 @@ public final class CommandHandlerParser {
                 }
             }
             CommandNode node = resolve(root, subCommand.value());
-            if (node.method() != null) {
+            if (node.action() != null) {
                 throw new IllegalStateException("重复的子命令：" + join(node.path()));
             }
-            node.setMethod(CommandMethod.parse(handler, method, subCommand));
+            node.setAction(parseAction(handler, method));
             node.setDescription(subCommand.description());
             node.setUsage(subCommand.usage());
             if (node.parent() == null) {
@@ -71,9 +78,40 @@ public final class CommandHandlerParser {
                 }
             }
         }
+        CommandErrorHandler commandErrorHandler = handler instanceof CommandErrorHandler
+                ? (CommandErrorHandler) handler : null;
         return new CommandDefinition(annotation.name(), Arrays.asList(annotation.aliases()),
                 annotation.permission(), annotation.description(), annotation.usage(),
-                new CommandResolver(root));
+                new CommandResolver(root, commandErrorHandler, defaultErrorHandler));
+    }
+
+    private static CommandAction parseAction(Object handler, Method method) {
+        if (method.getReturnType() != SubCommandSpec.class) {
+            throw new IllegalStateException("子命令方法必须返回 SubCommandSpec：" + method.getName());
+        }
+        if (method.getParameterCount() > 0) {
+            throw new IllegalStateException("子命令声明方法不能有参数：" + method.getName());
+        }
+        method.setAccessible(true);
+        SubCommandSpec spec;
+        try {
+            spec = (SubCommandSpec) method.invoke(handler);
+        } catch (IllegalAccessException exception) {
+            throw new IllegalStateException("子命令声明方法不可访问：" + method.getName(), exception);
+        } catch (InvocationTargetException exception) {
+            Throwable cause = exception.getCause();
+            if (cause instanceof RuntimeException) {
+                throw (RuntimeException) cause;
+            }
+            if (cause instanceof Error) {
+                throw (Error) cause;
+            }
+            throw new IllegalStateException("子命令声明方法执行失败：" + method.getName(), cause);
+        }
+        if (spec == null) {
+            throw new IllegalStateException("子命令声明不能返回 null：" + method.getName());
+        }
+        return new CommandAction(spec);
     }
 
     private static CommandNode resolve(CommandNode root, String value) {
