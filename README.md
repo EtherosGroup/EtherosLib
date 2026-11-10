@@ -4,6 +4,7 @@ Etheros 系列插件的跨平台核心库插件，支持 Bukkit/Paper 与 Veloci
 
 - 事件总线：跨插件共享的 `BusEvent` 投递，平台侧薄适配
 - 命令框架：注解声明命令与子命令，注册期构建发送者、参数与执行器，统一错误处理与 Tab 补全
+- 文本：平台无关 `Text`，按服务端能力自动渲染 Adventure Component 或 legacy `§` 字符串
 - DI：基于 [EtherosFramework](https://github.com/EtherosGroup/EtherosFramework) 的容器、全局 Bean 共享与生命周期
 - 平台核心：记录运行平台与版本，提供跨模块服务注册表
 
@@ -184,6 +185,37 @@ EtherosFramework 2.1.0 起，`BusEvent` 在设置载荷时逐项校验：
 | 节点上限 | 单次校验 1024 个节点；不限深度，深度受节点预算约束 |
 
 跨插件投递时不同插件的 classloader 下类型不一致，载荷里只放值语义数据；对象引用用 UUID、名称等标识表达，订阅方自行解析。
+
+## 文本
+
+平台无关的 `Text`：插件只写一套文本，由 Lib 按服务端能力渲染。
+
+```java
+Text message = Text.of("&7认证失败：").color(TextColor.RED)
+        .append("原因").bold()
+        .append(Text.of("（联系管理员）").color(TextColor.GRAY));
+sender.sendMessage(message);   // CommandSender.sendMessage(Text)
+```
+
+| 写法 | 说明 |
+|---|---|
+| `&0-9a-f` / `§0-9a-f` | 16 种命名颜色 |
+| `&l` `&o` `&n` `&m` `&k` | 粗体、斜体、下划线、删除线、乱码 |
+| `&r` | 重置样式 |
+| `&#RRGGBB` | RGB 颜色（1.16+ 支持，低版本降级） |
+| `\n` | 逐行拆分发送 |
+
+渲染规则：
+
+| 服务端 | 渲染方式 |
+|---|---|
+| Paper 1.16.5+（提供 Adventure） | 转为 `Component` 发送，保留 RGB 颜色 |
+| 其他（1.12–1.15、Spigot 等） | 渲染为 legacy `§` 字符串，RGB 降级为最接近的 16 色 |
+| 不支持的能力 | 自动忽略（hover/click 暂不支持） |
+
+- Adventure 桥接通过反射实现，不引入编译期依赖；服务端不提供 Adventure 或版本不兼容时自动回退 legacy；
+- 换行拆成多条消息发送；
+- 命令发送者 `CommandSender.sendMessage(Text)` 已接入该渲染链。
 
 ## 命令框架
 
@@ -396,12 +428,14 @@ EtherosLib/
 │       ├── Platform.java
 │       ├── event/               # 事件总线实现
 │       ├── log/                 # @InjectLogger、Logger 门面、{} 占位符、后端 SPI、JUL 后端、注入器
-│       └── command/             # 命令框架核心（声明、命令树、错误上下文、补全）
+│       ├── command/             # 命令框架核心（声明、命令树、错误上下文、补全）
+│       └── text/                # Text/TextColor/TextDecoration、legacy 渲染
 ├── bukkit/                      # Bukkit/Paper 平台实现
 │   └── src/main/java/cn/etheros/etheroslib/bukkit/
 │       ├── EtherosLib.java
 │       ├── event/BukkitEventBus.java
-│       └── command/             # 命令注册后端、发送者包装、平台参数类型
+│       ├── command/             # 命令注册后端、发送者包装、平台参数类型
+│       └── text/                # Adventure 文本桥接（反射，无编译期依赖）
 ├── velocity/                    # Velocity 平台实现
 │   └── src/main/java/cn/etheros/etheroslib/velocity/
 │       ├── EtherosLibVelocity.java
@@ -426,7 +460,8 @@ EtherosLib/
 - Velocity：以 `velocity-api 3.4.0` 编译，Java 17 字节码；
 - 命令框架当前提供 Bukkit 后端，Velocity/BungeeCord 后端按平台需要接入；
 - 命令框架 2.0 起改为注册期 `SubCommandSpec` 声明，旧式反射声明（方法形参 + `@Arg`）已移除；
-- 事件总线已覆盖 Bukkit 与 Velocity。
+- 事件总线已覆盖 Bukkit 与 Velocity；
+- 文本渲染：Paper 1.16.5+ 使用 Adventure Component，其余版本自动降级 legacy `§`；RGB 颜色在低版本取最接近的命名颜色。
 
 ## 许可
 

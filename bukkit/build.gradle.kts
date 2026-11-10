@@ -7,12 +7,16 @@ plugins {
 description = "EtherosLib Bukkit / Paper 平台实现"
 
 val paperApiVersion: String by project
+val adventureVersion = "4.17.0"
 
 dependencies {
     // 平台 API 仅编译期使用，运行期由服务端提供
     compileOnly("com.destroystokyo.paper:paper-api:$paperApiVersion")
     // 单测需要 Bukkit 类型
     testImplementation("com.destroystokyo.paper:paper-api:$paperApiVersion")
+    // Adventure 桥接测试：模拟 Paper 1.16.5+ 提供的 Adventure 4.x（运行期由服务端提供，不打包）
+    testImplementation("net.kyori:adventure-api:$adventureVersion")
+    testImplementation("net.kyori:adventure-text-serializer-legacy:$adventureVersion")
     // 跨平台核心：编译期传递给下游，运行期随 shadowJar 打包
     api(project(":common"))
 }
