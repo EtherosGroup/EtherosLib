@@ -5,6 +5,7 @@ Etheros 系列插件的跨平台核心库插件，支持 Bukkit/Paper 与 Veloci
 - 事件总线：跨插件共享的 `BusEvent` 投递，平台侧薄适配
 - 命令框架：注解声明命令与子命令，注册期构建发送者、参数与执行器，统一错误处理与 Tab 补全
 - 文本：平台无关 `Text`，按服务端能力自动渲染 Adventure Component 或 legacy `§` 字符串
+- 消息：`Messenger` 统一玩家/控制台消息，前缀与等级标签可配置
 - DI：基于 [EtherosFramework](https://github.com/EtherosGroup/EtherosFramework) 的容器、全局 Bean 共享与生命周期
 - 平台核心：记录运行平台与版本，提供跨模块服务注册表
 
@@ -216,6 +217,39 @@ sender.sendMessage(message);   // CommandSender.sendMessage(Text)
 - Adventure 桥接通过反射实现，不引入编译期依赖；服务端不提供 Adventure 或版本不兼容时自动回退 legacy；
 - 换行拆成多条消息发送；
 - 命令发送者 `CommandSender.sendMessage(Text)` 已接入该渲染链。
+
+## Messenger
+
+日志走 `@InjectLogger`，面向玩家与控制台的消息走 `Messenger`：启动时构建一次并注册为 DI Bean。
+
+```java
+Messenger messenger = Messenger.builder(BukkitTargets.console())
+        .setPrefix("[EtherosAuth]")
+        .setInfo("[INFO ] ")
+        .setWarn("[WARN ] ")
+        .setError("[ERROR] ")
+        .setDebug("[DEBUG] ")
+        .setDebugEnabled(() -> config.getBoolean("messenger.debug"))
+        .build();
+
+context = ApplicationContext.run(MyPlugin.class, messenger);
+```
+
+```java
+@Autowired
+private Messenger messenger;
+
+messenger.console().info("插件已启用");
+messenger.console().warn("配置项缺失");
+messenger.console().error("连接失败", exception);        // 控制台附加异常堆栈
+messenger.player(BukkitTargets.of(player)).send("&a欢迎，{}", player.getName());
+```
+
+- 输出格式：`prefix + label + message`，不自动补空格；
+- 首个参数为 `Boolean` 时视为 `enablePrefix`（缺省 `true`）：`console().info(false, "静默提示")`；
+- 前缀、标签、debug 开关都通过 `Supplier` 解析，配置重载后下一条消息生效；
+- 控制台不去色（服务端日志自行记录纯文本）；玩家消息只有前缀、没有等级标签；
+- 平台目标：Bukkit `BukkitTargets.console()` / `BukkitTargets.of(CommandSender)`；Velocity `VelocityTargets.console(proxy)` / `VelocityTargets.of(CommandSource)`。
 
 ## 命令框架
 
@@ -429,18 +463,21 @@ EtherosLib/
 │       ├── event/               # 事件总线实现
 │       ├── log/                 # @InjectLogger、Logger 门面、{} 占位符、后端 SPI、JUL 后端、注入器
 │       ├── command/             # 命令框架核心（声明、命令树、错误上下文、补全）
-│       └── text/                # Text/TextColor/TextDecoration、legacy 渲染
+│       ├── text/                # Text/TextColor/TextDecoration、legacy 渲染
+│       └── messenger/           # Messenger、消息格式化、发送目标抽象
 ├── bukkit/                      # Bukkit/Paper 平台实现
 │   └── src/main/java/cn/etheros/etheroslib/bukkit/
 │       ├── EtherosLib.java
 │       ├── event/BukkitEventBus.java
 │       ├── command/             # 命令注册后端、发送者包装、平台参数类型
-│       └── text/                # Adventure 文本桥接（反射，无编译期依赖）
+│       ├── text/                # Adventure 文本桥接（反射，无编译期依赖）
+│       └── messenger/           # 控制台/玩家发送目标
 ├── velocity/                    # Velocity 平台实现
 │   └── src/main/java/cn/etheros/etheroslib/velocity/
 │       ├── EtherosLibVelocity.java
 │       ├── event/VelocityEventBus.java
-│       └── log/Slf4jLogBackend.java
+│       ├── log/Slf4jLogBackend.java
+│       └── messenger/           # Text→Component 渲染与发送目标
 └── .github/
     ├── workflows/ci.yml         # push/PR：构建、测试、产物校验
     ├── workflows/release.yml    # tag：构建并发布 GitHub Release

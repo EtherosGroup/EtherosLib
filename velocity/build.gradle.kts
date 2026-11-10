@@ -53,6 +53,8 @@ dependencies {
     compileOnly("com.velocitypowered:velocity-api:$velocityApiVersion")
     // 注解处理器生成 velocity-plugin.json
     annotationProcessor("com.velocitypowered:velocity-api:$velocityApiVersion")
+    // 单测需要 Adventure 类型（velocity-api 以 compile scope 依赖 Adventure）
+    testImplementation("com.velocitypowered:velocity-api:$velocityApiVersion")
     // 跨平台核心：编译期传递给下游，运行期随 shadowJar 打包
     api(project(":common"))
 }

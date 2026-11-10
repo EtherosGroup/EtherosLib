@@ -57,6 +57,37 @@ public final class Text {
     }
 
     /**
+     * 纯文本：不解析任何颜色码，内容原样保留
+     *
+     * <p>用于异常堆栈、命令行输出等不应被当作格式串处理的内容
+     */
+    public static Text plain(String input) {
+        Objects.requireNonNull(input, "input");
+        String content = normalize(input);
+        if (content.isEmpty()) {
+            return empty();
+        }
+        List<Segment> segments = Collections.singletonList(
+                new Segment(content, null, EnumSet.noneOf(TextDecoration.class)));
+        return new Text(segments, null, EnumSet.noneOf(TextDecoration.class));
+    }
+
+    /**
+     * 顺序拼接多个文本
+     *
+     * <p>不继承样式，各段保留自身颜色与装饰；用于把「前缀 + 标签 + 正文」这类独立文本拼在一起
+     */
+    public static Text concat(Text... texts) {
+        Objects.requireNonNull(texts, "texts");
+        List<Segment> merged = new ArrayList<Segment>();
+        for (Text text : texts) {
+            Objects.requireNonNull(text, "text");
+            merged.addAll(text.segments);
+        }
+        return new Text(merged, null, EnumSet.noneOf(TextDecoration.class));
+    }
+
+    /**
      * 设置颜色，覆盖已有颜色
      *
      * @param color 目标颜色，null 表示恢复默认颜色
