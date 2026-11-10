@@ -8,7 +8,7 @@ import java.util.Objects;
 /**
  * 玩家消息
  *
- * <p>只拼接前缀（不带等级标签），正文支持 & 颜色码 / RGB / {@link Text}，
+ * <p>只拼接前缀（不带等级标签），正文支持 {@code &} 颜色码 / RGB / {@link Text}，
  * 交给平台目标按能力渲染（Paper 走 Component，其余版本走 legacy §）
  *
  * <p>首个参数为 {@link Boolean} 时视为 {@code enablePrefix}（缺省 true），

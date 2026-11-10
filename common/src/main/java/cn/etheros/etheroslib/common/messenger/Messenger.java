@@ -120,7 +120,7 @@ public final class Messenger {
             this.consoleTarget = Objects.requireNonNull(consoleTarget, "consoleTarget");
         }
 
-        /** 消息前缀（支持 & 颜色码），默认空串 */
+        /** 消息前缀（支持 {@code &} 颜色码），默认空串 */
         public Builder setPrefix(Supplier<String> prefix) {
             this.prefix = Objects.requireNonNull(prefix, "prefix");
             return this;
@@ -131,7 +131,7 @@ public final class Messenger {
             return setPrefix(() -> prefix == null ? "" : prefix);
         }
 
-        /** INFO 标签（支持 & 颜色码），默认 {@value Messenger#DEFAULT_INFO_LABEL} */
+        /** INFO 标签（支持 {@code &} 颜色码），默认 {@value Messenger#DEFAULT_INFO_LABEL} */
         public Builder setInfo(Supplier<String> infoLabel) {
             this.infoLabel = Objects.requireNonNull(infoLabel, "infoLabel");
             return this;
