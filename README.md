@@ -41,9 +41,9 @@ EtherosLib 以宿主插件方式运行：
 ```kotlin
 dependencies {
     // Bukkit 端
-    compileOnly("cn.etheros.etheroslib:EtherosLib-Bukkit:2.2.0")
+    compileOnly("cn.etheros.etheroslib:EtherosLib-Bukkit:2.3.0")
     // Velocity 端
-    // compileOnly("cn.etheros.etheroslib:EtherosLib-Velocity:2.2.0")
+    // compileOnly("cn.etheros.etheroslib:EtherosLib-Velocity:2.3.0")
 }
 ```
 
@@ -489,7 +489,7 @@ EtherosLib/
 - `ci.yml`：推 `master` 与 PR 时构建、跑测试、校验产物（jar 完整性、插件元数据、common/framework 合并、字节码版本）；
 - `release.yml`：推送 `v*` 标签时构建并创建 GitHub Release，附件为三个插件 jar 与 `SHA256SUMS.txt`；
 - `publish.yml`：推送 `v*` 标签或手动触发时构建并发布到 Maven Central，需要仓库 Secrets：`MAVEN_CENTRAL_USERNAME`、`MAVEN_CENTRAL_PASSWORD`、`GPG_SIGNING_KEY`、`GPG_SIGNING_PASSWORD`；
-- 发版流程：修改 `gradle.properties` 的 `projectVersion` → 提交 → 打同名标签（如 `v2.2.0`）→ 推送，`release.yml` 与 `publish.yml` 同时执行；标签与工程版本不一致时发布会失败。
+- 发版流程：修改 `gradle.properties` 的 `projectVersion` → 提交 → 打同名标签（如 `v2.3.0`）→ 推送，`release.yml` 与 `publish.yml` 同时执行；标签与工程版本不一致时发布会失败。
 
 ## 兼容性
 
