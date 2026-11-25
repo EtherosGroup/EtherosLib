@@ -223,7 +223,8 @@ sender.sendMessage(message);   // CommandSender.sendMessage(Text)
 日志走 `@InjectLogger`，面向玩家与控制台的消息走 `Messenger`：启动时构建一次并注册为 DI Bean。
 
 ```java
-Messenger messenger = Messenger.builder(BukkitTargets.console())
+Messenger messenger = new Messenger.Builder()
+        .setConsole(BukkitTargets.console())
         .setPrefix("[EtherosAuth]")
         .setInfo("[INFO ] ")
         .setWarn("[WARN ] ")
@@ -231,22 +232,43 @@ Messenger messenger = Messenger.builder(BukkitTargets.console())
         .setDebug("[DEBUG] ")
         .setDebugEnabled(() -> config.getBoolean("messenger.debug"))
         .build();
+```
 
-context = ApplicationContext.run(MyPlugin.class, messenger);
+推荐用 `@Configuration` + `@Bean` 注册为 Bean（`@Bean` 执行早于 `@PostConstruct`，配置读取放进 `Supplier`）：
+
+```java
+@Configuration
+public class MessengerConfiguration {
+
+    @Autowired
+    private ConfigManager configManager;
+
+    @Bean
+    public Messenger messenger() {
+        return new Messenger.Builder()
+                .setConsole(BukkitTargets.console())
+                .setPrefix(() -> configManager.prefix())
+                .setDebugEnabled(() -> configManager.debugEnabled())
+                .build();
+    }
+}
 ```
 
 ```java
 @Autowired
 private Messenger messenger;
 
-messenger.console().info("插件已启用");
-messenger.console().warn("配置项缺失");
-messenger.console().error("连接失败", exception);        // 控制台附加异常堆栈
+messenger.info("插件已启用");
+messenger.warn("配置项缺失");
+messenger.error("连接失败", exception);        // 控制台附加异常堆栈
+messenger.debug("缓存命中 {}", key);
 messenger.player(BukkitTargets.of(player)).send("&a欢迎，{}", player.getName());
 ```
 
+- 控制台方法直接挂在 `Messenger` 上：`info` / `warn` / `error` / `debug`；
 - 输出格式：`prefix + label + message`，不自动补空格；
-- 首个参数为 `Boolean` 时视为 `enablePrefix`（缺省 `true`）：`console().info(false, "静默提示")`；
+- 首个参数为 `Boolean` 时视为 `enablePrefix`（缺省 `true`）：`messenger.info(false, "静默提示")`；
+- `build()` 必须已调用 `setConsole(...)`，否则抛 `IllegalStateException`；
 - 前缀、标签、debug 开关都通过 `Supplier` 解析，配置重载后下一条消息生效；
 - 控制台不去色（服务端日志自行记录纯文本）；玩家消息只有前缀、没有等级标签；
 - 平台目标：Bukkit `BukkitTargets.console()` / `BukkitTargets.of(CommandSender)`；Velocity `VelocityTargets.console(proxy)` / `VelocityTargets.of(CommandSource)`。
